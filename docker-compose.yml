@@ -38,10 +38,10 @@ services:
       - kafka
       - zookeeper
     environment:
-      POLYGON_WS_URL: "wss://socket.polygon.io/stocks"
-      POLYGON_TOKEN: ""
-      # Check https://polygon.io/sockets for complete description of available subscriptions
-      POLYGON_SUBSCRIPTIONS: "T.MSFT,T.AAPL,T.AMZN"
+      MASSIVE_WS_URL: "wss://socket.massive.com/stocks"
+      MASSIVE_TOKEN: ""
+      # Check https://massive.com/docs/websocket/stocks for complete description of available subscriptions
+      MASSIVE_SUBSCRIPTIONS: "T.MSFT,T.AAPL,T.AMZN"
 
   zookeeper:
     image: zookeeper:3.4.9

@@ -5,6 +5,7 @@ import time
 
 import alpaca_trade_api as tradeapi
 import pandas as pd
+import requests
 
 from broker import Broker
 
@@ -22,6 +23,15 @@ def get_api():
     api = tradeapi.REST(key_id=key, secret_key=secret, base_url=base_url)
 
     return api
+
+
+def get_massive_api_key():
+    """Get Massive API key from environment variables."""
+    if 'MASSIVE_TOKEN' not in os.environ.keys():
+        from dotenv import load_dotenv
+        load_dotenv()
+    
+    return os.getenv('MASSIVE_TOKEN')
 
 
 class Alpaca(Broker):
@@ -387,7 +397,11 @@ class Alpaca(Broker):
         return value
 
     def vw_price(self, _asset):
-
+        """Get volume weighted average price (VWAP) for the previous trading day.
+        
+        Uses Massive REST API to fetch the previous day's aggregate bar data.
+        See: https://massive.com/docs/rest/stocks/aggregates
+        """
         if isinstance(_asset, str):
             a_id = _asset
         else:
@@ -395,8 +409,39 @@ class Alpaca(Broker):
 
         vw = 0.0
 
-        snap = self._conn.polygon.snapshot(a_id)
-
-        vw = snap.__dict__['_raw']['ticker']['day']['vw']
+        try:
+            massive_api_key = get_massive_api_key()
+            if not massive_api_key:
+                self.log("MASSIVE_TOKEN not found in environment variables")
+                return vw
+            
+            # Get previous trading day (go back 3 days to handle weekends)
+            end_date = datetime.datetime.now().date()
+            start_date = end_date - datetime.timedelta(days=3)
+            
+            # Construct Massive API request for daily aggregates
+            url = f"https://api.massive.com/v2/aggs/ticker/{a_id}/range/1/day/{start_date}/{end_date}"
+            params = {
+                'adjusted': 'true',
+                'sort': 'desc',
+                'limit': 1,
+                'apiKey': massive_api_key
+            }
+            
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get('status') == 'OK' and data.get('results'):
+                # Get the most recent day's VWAP
+                vw = data['results'][0].get('vw', 0.0)
+            else:
+                self.log(f"No VWAP data found for {a_id}")
+                
+        except requests.exceptions.RequestException as e:
+            self.log(f"Massive API request failed for {a_id}: {str(e)}")
+        except (KeyError, IndexError, ValueError) as e:
+            self.log(f"Error parsing Massive API response for {a_id}: {str(e)}")
 
         return vw
